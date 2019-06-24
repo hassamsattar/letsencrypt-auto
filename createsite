@@ -1,0 +1,121 @@
+#!/bin/bash
+
+#Hassam-Devops Auto create site
+
+# global settings
+###################################################################
+# nginx virtual hosts configuration file directory
+VHCONFDIR=/etc/nginx/sites-available/
+
+# nginx virtual hosts http template
+VHTEMPLATE=/etc/nginx/site.tpl
+
+# nginx virtual hosts https template
+VHSSLTEMPLATE=/etc/nginx/http-ssl-template.tpl
+
+# document root for your websites
+VHWWWROOT=/var/www/
+
+# name of document root directory
+VHPUBLICDIR=""
+
+# default splas screen text
+VHPLACEHOLDERTEXT="Resthero-Devops New Project"
+
+# ssl certificates directory
+VHSSLDOCROOT="/etc/letsencrypt/live/"
+
+# www user
+WWWUSER="root"
+
+# www group
+WWWGROUP="root"
+
+# nginx restart command
+NGINXRESTART=$(systemctl restart nginx)
+###################################################################
+
+# domain name for virtual host
+while [[ -z "$VHNAME" ]]
+do
+  echo ""
+        read  -p "Enter domain name [without www]: " VHNAME
+done
+
+# enable ssl?
+while [[ "$VHSSL" != "y" && "$VHSSL" != "n" ]]
+do
+        echo ""
+        read  -p "Do you want SSL support? [y/n]: " VHSSL
+done
+
+# check if domain name already exists in configuration files
+if [ "$(grep -ri $VHNAME $VHCONFDIR)" ]; then
+        echo "Domain $VHNAME already in configuration files!"
+        exit 1
+fi
+
+# define some vars
+VHCFGFILE=$VHCONFDIR$VHNAME;
+VHDOCROOT=$VHWWWROOT$VHNAME'/'$VHPUBLICDIR;
+VHSSLDIR=$VHSSLDOCROOT$VHNAME
+
+# Create document root and set permissions
+if [ -d "$VHDOCROOT" ]; then
+        echo "Document root $VHDOCROOT already exists"
+        exit 1
+else
+        mkdir -p $VHDOCROOT
+        chown -R $WWWUSER:$WWWGROUP $VHDOCROOT
+        touch $VHDOCROOT"/index.php"
+        echo $VHPLACEHOLDERTEXT > $VHDOCROOT"/index.php"
+fi
+
+# generate nginx configuration
+if [ "$VHSSL" == "yes" -o "$VHSSL" == "y" ]; then
+cp $VHTEMPLATE $VHCFGFILE
+        sed -i.bak "s|VHNAME|$VHNAME|g;s|VHDOCROOT|$VHDOCROOT|g" $VHCFGFILE
+        ln -s $VHCFGFILE /etc/nginx/sites-enabled/
+        rm $VHCFGFILE".bak"
+        sudo /opt/certbot/certbot-auto --nginx -d $VHNAME -d www.$VHNAME
+else
+        cp $VHTEMPLATE $VHCFGFILE
+        sed -i.bak "s|VHNAME|$VHNAME|g;s|VHDOCROOT|$VHDOCROOT|g" $VHCFGFILE
+        ln -s $VHCFGFILE/ /etc/nginx/sites-enabled/
+        rm $VHCFGFILE".bak"
+fi
+
+
+# restart nginx
+$NGINXRESTART
+
+
+# generate output
+###################################################################################################
+echo -e ""
+echo -e ""
+echo -e ""
+echo -e "---------------------------------------------------------------------"
+echo -e "  Your virtual host for $VHNAME has been created!"
+echo -e "---------------------------------------------------------------------"
+echo -e ""
+echo -e "Domain name: $VHNAME"
+echo -e "Document root: $VHDOCROOT"
+echo -e "Document root owner: $WWWUSER:$WWWGROUP"
+if [ "$VHSSL" == "y" ]; then
+        echo -e ""
+        echo -e "SSL enabled: yes"
+        echo -e "SSL certificate directory: $VHSSLDIR"
+        echo -e ""
+        echo -e "certificates and key files can be found in letsencrypt directory"
+        echo -e ""
+fi
+echo -e "NGINX is already restarted!"
+echo -e ""
+echo -e "---------------------------------------------------------------------"
+echo -e ""
+echo -e ""
+echo -e "Enjoy! :)"
+echo -e ""
+echo -e ""
+###################################################################################################
